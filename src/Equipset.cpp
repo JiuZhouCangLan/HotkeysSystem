@@ -82,6 +82,13 @@ static void UnequipItem(RE::TESForm* _form, RE::BGSEquipSlot* _slot, bool _sound
     }
 }
 
+static bool isTwoHandedWeapon(RE::TESObjectWEAP* obj) {
+    if (obj->IsTwoHandedAxe() || obj->IsTwoHandedSword() || obj->IsBow() || obj->IsCrossbow()) {
+        return true;
+    }
+    return false;
+}
+
 void NormalSet::Equip() {
     auto player = RE::PlayerCharacter::GetSingleton();
     if (!player) return;
@@ -240,13 +247,25 @@ void NormalSet::Equip() {
             UnequipItem(equipset->items[i].form, nullptr, equipset->equipSound, xList);
         }
     }
-
+    if (equippedLeft != nullptr && equippedLeft->Is(RE::FormType::Weapon) && isTwoHandedWeapon(static_cast<RE::TESObjectWEAP*>(equippedLeft)) 
+        && equippedLeft->GetName() != equipset->lefthand.name) {
+        EquipItem(DummyDagger, GetLeftHandSlot(), false, nullptr, false, true);
+        UnequipItem(DummyDagger, GetLeftHandSlot(), false, nullptr, false, true);
+    }
+    equippedLeft = player->GetEquippedObject(true);
+    if(equippedLeft != nullptr && equippedLeft->GetName() == equipset->lefthand.name){
+        equipLeft = false;
+    }
     if (equipLeft && equipset->lefthand.form &&
         equipset->lefthand.type != Data::DATATYPE::NOTHING &&
         equipset->lefthand.type != Data::DATATYPE::UNEQUIP) {
         auto& weapon = equipset->lefthand;
         auto xList = Extra::SearchExtraDataList(weapon.name, weapon.enchNum, weapon.enchName, weapon.tempVal);
         EquipItem(equipset->lefthand.form, GetLeftHandSlot(), equipset->equipSound, xList);
+    }
+    equippedRight = player->GetEquippedObject(false);
+    if(equippedRight != nullptr && equippedRight->GetName() == equipset->righthand.name){
+        equipRight = false;
     }
     if (equipRight && equipset->righthand.form &&
         equipset->righthand.type != Data::DATATYPE::NOTHING &&
