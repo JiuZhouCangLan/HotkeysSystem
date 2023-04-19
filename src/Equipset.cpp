@@ -252,6 +252,7 @@ void NormalSet::Equip() {
         EquipItem(DummyDagger, GetLeftHandSlot(), false, nullptr, false, true);
         UnequipItem(DummyDagger, GetLeftHandSlot(), false, nullptr, false, true);
     }
+    // notice: need equip left hand weapon, otherwise left hand weapon lost charge
     equippedLeft = player->GetEquippedObject(true);
     if(equippedLeft != nullptr && equippedLeft->GetName() == equipset->lefthand.name){
         equipLeft = false;
@@ -260,9 +261,11 @@ void NormalSet::Equip() {
         equipset->lefthand.type != Data::DATATYPE::NOTHING &&
         equipset->lefthand.type != Data::DATATYPE::UNEQUIP) {
         auto& weapon = equipset->lefthand;
-        auto xList = Extra::SearchExtraDataList(weapon.name, weapon.enchNum, weapon.enchName, weapon.tempVal);
+        // add a name salt seem to avoid left hand weapon can`t be equip problem when left hand and right hand has same name weapon
+        auto xList = Extra::SearchExtraDataList(weapon.name + "L", weapon.enchNum, weapon.enchName, weapon.tempVal);
         EquipItem(equipset->lefthand.form, GetLeftHandSlot(), equipset->equipSound, xList);
     }
+    
     equippedRight = player->GetEquippedObject(false);
     if(equippedRight != nullptr && equippedRight->GetName() == equipset->righthand.name){
         equipRight = false;
