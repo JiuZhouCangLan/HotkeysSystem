@@ -274,7 +274,7 @@ void NormalSet::Equip() {
         equipset->righthand.type != Data::DATATYPE::NOTHING &&
         equipset->righthand.type != Data::DATATYPE::UNEQUIP) {
         auto& weapon = equipset->righthand;
-        auto xList = Extra::SearchExtraDataList(weapon.name, weapon.enchNum, weapon.enchName, weapon.tempVal);
+        auto xList = Extra::SearchExtraDataList(weapon.name + "R", weapon.enchNum, weapon.enchName, weapon.tempVal);
         EquipItem(equipset->righthand.form, GetRightHandSlot(), equipset->equipSound, xList);
     }
     if (equipShout && equipset->shout.form &&
