@@ -1,19 +1,22 @@
 #include "GuiMenu.h"
-#include "Data.h"
-#include "Draw.h"
-#include "Config.h"
-#include "EquipsetManager.h"
-#include "Equipment.h"
-#include "Translate.h"
-#include "WidgetHandler.h"
+
+#include <RE/C/ControlMap.h>
+#include <RE/U/UserEventEnabled.h>
+#include <imgui.h>
+#include <imgui_internal.h>
 
 #include <filesystem>
 
-#include <imgui.h>
-#include <imgui_internal.h>
+#include "Config.h"
+#include "Data.h"
+#include "Draw.h"
+#include "Equipment.h"
+#include "EquipsetManager.h"
+#include "Translate.h"
+#include "WidgetHandler.h"
+#include "extern/IconsFontAwesome5.h"
 #include "extern/imgui_impl_dx11.h"
 #include "extern/imgui_stdlib.h"
-#include "extern/IconsFontAwesome5.h"
 
 GuiMenu::GuiMenu() {
     ConfigHandler::GetSingleton()->LoadConfig();
@@ -21,11 +24,50 @@ GuiMenu::GuiMenu() {
     logger::info("GuiMenu initialized!");
 }
 
+template <typename T>
+T& GetMember(T& base, std::ptrdiff_t offset) {
+    auto *basePtr = &base;
+    auto address = std::uintptr_t(basePtr) + offset;
+    auto reloc = REL::Relocation<T*>(address);
+    return *reloc.get();
+}
+
+void ToggleControls(RE::ControlMap* control, RE::ControlMap::UEFlag a_flags, bool a_enable) {
+    constexpr auto post1130Offset = 0x120 - 0x118;
+
+    auto& enabledControls = GetMember(control->enabledControls, post1130Offset);
+    auto& unk11C = GetMember(control->unk11C, post1130Offset);
+
+    auto oldState = enabledControls;
+
+    if (a_enable) {
+        enabledControls.set(a_flags);
+        if (unk11C != RE::ControlMap::UEFlag::kInvalid) {
+            unk11C.set(a_flags);
+        }
+    } else {
+        enabledControls.reset(a_flags);
+        if (unk11C != RE::ControlMap::UEFlag::kInvalid) {
+            unk11C.reset(a_flags);
+        }
+    }
+
+    RE::UserEventEnabled event{enabledControls, oldState};
+    control->SendEvent(std::addressof(event));
+}
+
 void GuiMenu::DisableInput(bool _status) {
     auto control = RE::ControlMap::GetSingleton();
     if (!control) return;
 
-    control->ToggleControls(RE::ControlMap::UEFlag::kMovement, !_status);
+    auto module = &REL::Module::get();
+    bool post1130 = module && module->IsAE() && (module->version().patch() > 0x400);
+
+    if (post1130) {
+        ToggleControls(control, RE::ControlMap::UEFlag::kAll, !_status);
+    } else {
+        control->ToggleControls(RE::ControlMap::UEFlag::kAll, !_status);
+    }
 }
 
 void GuiMenu::Toggle(std::optional<bool> enabled = std::nullopt) {
@@ -91,9 +133,9 @@ void GuiMenu::DrawMain() {
         !ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME)) {
         Toggle();
     }
-    //if (ImGui::IsKeyPressed(config->Gui.hotkey)) {
-    //    Toggle();
-    //}
+    // if (ImGui::IsKeyPressed(config->Gui.hotkey)) {
+    //     Toggle();
+    // }
     io.MouseDrawCursor = show;
     io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
 
@@ -102,9 +144,15 @@ void GuiMenu::DrawMain() {
     if (font) ImGui::PushFont(font);
     auto& style = ImGui::GetStyle();
     switch (static_cast<Config::GuiStyle>(config->Gui.style)) {
-        case Config::GuiStyle::DARK: ImGui::StyleColorsDark(); break;
-        case Config::GuiStyle::LIGHT: ImGui::StyleColorsLight(); break;
-        case Config::GuiStyle::CLASSIC: ImGui::StyleColorsClassic(); break;
+        case Config::GuiStyle::DARK:
+            ImGui::StyleColorsDark();
+            break;
+        case Config::GuiStyle::LIGHT:
+            ImGui::StyleColorsLight();
+            break;
+        case Config::GuiStyle::CLASSIC:
+            ImGui::StyleColorsClassic();
+            break;
     }
     style.WindowRounding = config->Gui.rounding;
     style.ChildRounding = config->Gui.rounding;
@@ -128,10 +176,12 @@ void GuiMenu::DrawMain() {
 
     ImGui::SetNextWindowPos({0, 0}, ImGuiCond_Once);
     ImGui::SetNextWindowSize({viewport->Size.x / 3, viewport->Size.y}, ImGuiCond_Once);
-    if (ImGui::Begin(fmt::format("UI-Integrated Hotkeys System {}", SKSE::PluginDeclaration::GetSingleton()->GetVersion().string()).c_str(),
+    if (ImGui::Begin(fmt::format("UI-Integrated Hotkeys System {}",
+                                 SKSE::PluginDeclaration::GetSingleton()->GetVersion().string())
+                         .c_str(),
                      nullptr,
-                     ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_MenuBar)) {
-
+                     ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoCollapse |
+                         ImGuiWindowFlags_MenuBar)) {
         if (ImGui::BeginMenuBar()) {
             if (ImGui::BeginMenu(C_TRANSLATE("_MENUBAR_FILE"))) {
                 ImGui::MenuItem(C_TRANSLATE("_TAB_EQUIPSETS"), NULL, false, false);
@@ -173,7 +223,7 @@ void GuiMenu::DrawMain() {
                     dataHandler->Init();
                     GuiMenu::NotifyFontReload();
                 }
-                
+
                 ImGui::EndMenu();
             }
             ImGui::EndMenuBar();
@@ -201,22 +251,10 @@ void GuiMenu::DrawMain() {
                     auto cycleSize = ImGui::CalcTextSize(C_TRANSLATE("_SELECT_NEW_CYCLE"));
                     auto cancelSize = ImGui::CalcTextSize(C_TRANSLATE("_CANCEL"));
 
-                    std::vector<float> vecX = {
-                        normalSize.x,
-                        potionSize.x,
-                        cycleSize.x,
-                        cancelSize.x
-                    };
-                    std::vector<float> vecY = {
-                        normalSize.y,
-                        potionSize.y,
-                        cycleSize.y,
-                        cancelSize.y
-                    };
+                    std::vector<float> vecX = {normalSize.x, potionSize.x, cycleSize.x, cancelSize.x};
+                    std::vector<float> vecY = {normalSize.y, potionSize.y, cycleSize.y, cancelSize.y};
 
-                    auto compare = [](float a, float b) {
-                        return a > b;
-                    };
+                    auto compare = [](float a, float b) { return a > b; };
 
                     std::sort(vecX.begin(), vecX.end(), compare);
                     std::sort(vecY.begin(), vecY.end(), compare);
@@ -332,7 +370,7 @@ void GuiMenu::DrawMain() {
             }
             ImGui::EndTabBar();
         }
-        
+
         ImGui::EndChild();
     } else {
         Toggle(false);
@@ -415,24 +453,37 @@ void GuiMenu::DrawEquipment() {
     auto Reload = [&shouldReload]() { shouldReload = true; };
 
     auto DrawWidgetIconSection = [ts, Reload](WidgetIcon* _widget) {
-        if (ImGui::Checkbox(C_TRANSLATE("_WIDGET_ENABLE"), &_widget->enable)) { Reload(); }
-        if (Draw::SliderInt(C_TRANSLATE("_WIDGET_OFFSETX"), &_widget->offsetX, Config::icon_smin,
-                        Config::icon_smax, "%d", ImGuiSliderFlags_AlwaysClamp)) { Reload(); }
-        if (Draw::SliderInt(C_TRANSLATE("_WIDGET_OFFSETY"), &_widget->offsetY, Config::icon_smin,
-                        Config::icon_smax, "%d", ImGuiSliderFlags_AlwaysClamp)) { Reload(); }
-    }; 
+        if (ImGui::Checkbox(C_TRANSLATE("_WIDGET_ENABLE"), &_widget->enable)) {
+            Reload();
+        }
+        if (Draw::SliderInt(C_TRANSLATE("_WIDGET_OFFSETX"), &_widget->offsetX, Config::icon_smin, Config::icon_smax,
+                            "%d", ImGuiSliderFlags_AlwaysClamp)) {
+            Reload();
+        }
+        if (Draw::SliderInt(C_TRANSLATE("_WIDGET_OFFSETY"), &_widget->offsetY, Config::icon_smin, Config::icon_smax,
+                            "%d", ImGuiSliderFlags_AlwaysClamp)) {
+            Reload();
+        }
+    };
     auto DrawWidgetTextSection = [ts, Reload](WidgetText* _widget) {
-        std::vector<std::string> align_items = {TRANSLATE("_ALIGN_LEFT"),
-                                                TRANSLATE("_ALIGN_RIGHT"),
+        std::vector<std::string> align_items = {TRANSLATE("_ALIGN_LEFT"), TRANSLATE("_ALIGN_RIGHT"),
                                                 TRANSLATE("_ALIGN_CENTER")};
 
-        if (ImGui::Checkbox(C_TRANSLATE("_WIDGET_ENABLE"), &_widget->enable)) { Reload(); }
+        if (ImGui::Checkbox(C_TRANSLATE("_WIDGET_ENABLE"), &_widget->enable)) {
+            Reload();
+        }
         uint32_t* align = reinterpret_cast<uint32_t*>(&_widget->align);
-        if (Draw::Combo(align_items, align, C_TRANSLATE("_WIDGET_ALIGN"))) { Reload(); }
-        if (Draw::SliderInt(C_TRANSLATE("_WIDGET_OFFSETX"), &_widget->offsetX, Config::text_smin,
-                        Config::text_smax, "%d", ImGuiSliderFlags_AlwaysClamp)) { Reload(); }
-        if (Draw::SliderInt(C_TRANSLATE("_WIDGET_OFFSETY"), &_widget->offsetY, Config::text_smin,
-                        Config::text_smax, "%d", ImGuiSliderFlags_AlwaysClamp)) { Reload(); }
+        if (Draw::Combo(align_items, align, C_TRANSLATE("_WIDGET_ALIGN"))) {
+            Reload();
+        }
+        if (Draw::SliderInt(C_TRANSLATE("_WIDGET_OFFSETX"), &_widget->offsetX, Config::text_smin, Config::text_smax,
+                            "%d", ImGuiSliderFlags_AlwaysClamp)) {
+            Reload();
+        }
+        if (Draw::SliderInt(C_TRANSLATE("_WIDGET_OFFSETY"), &_widget->offsetY, Config::text_smin, Config::text_smax,
+                            "%d", ImGuiSliderFlags_AlwaysClamp)) {
+            Reload();
+        }
     };
 
     if (ImGui::CollapsingHeader(C_TRANSLATE("_TAB_EQUIPMENT_ARMOR"))) {
@@ -449,7 +500,8 @@ void GuiMenu::DrawEquipment() {
                 auto groupLabel = fmt::format("{}  {}", ICON_FA_IMAGE, TRANSLATE("_TAB_CONFIG_WIDGET"));
                 Draw::BeginGroupPanel(groupLabel.c_str(), ImVec2(-FLT_MIN, 0.0f), ImVec2(15.0f, 10.0f));
                 {
-                    ImGui::BeginChild("LeftRegion", ImVec2(ImGui::GetContentRegionAvail().x * 0.5f, groupSize[i].y), false);
+                    ImGui::BeginChild("LeftRegion", ImVec2(ImGui::GetContentRegionAvail().x * 0.5f, groupSize[i].y),
+                                      false);
                     {
                         ImGui::BeginGroup();
                         {
@@ -596,7 +648,7 @@ void GuiMenu::DrawEquipment() {
         static auto groupRightSize = ImVec2(0.0f, 0.0f);
         auto groupLabel = fmt::format("{}  {}", ICON_FA_IMAGE, TRANSLATE("_TAB_CONFIG_WIDGET"));
         Draw::BeginGroupPanel(groupLabel.c_str(), ImVec2(-FLT_MIN, 0.0f), ImVec2(15.0f, 10.0f));
-        {       
+        {
             ImGui::BeginChild("LeftRegion", ImVec2(ImGui::GetContentRegionAvail().x * 0.5f, groupSize.y), false);
             {
                 ImGui::BeginGroup();
@@ -669,16 +721,28 @@ void GuiMenu::DrawConfig() {
     auto Reload = [&shouldReload]() { shouldReload = true; };
 
     auto DrawWidgetSection = [ts, Reload](ConfigHandler::WidgetBase* _widget) {
-        if (Draw::ComboIcon(&_widget->bgType, C_TRANSLATE("_BACKGROUND_TYPE"))) { Reload(); }
+        if (Draw::ComboIcon(&_widget->bgType, C_TRANSLATE("_BACKGROUND_TYPE"))) {
+            Reload();
+        }
         if (Draw::SliderInt(C_TRANSLATE("_BACKGROUND_SIZE"), &_widget->bgSize, 0, 200, "%d%%",
-                        ImGuiSliderFlags_AlwaysClamp)) { Reload(); }
+                            ImGuiSliderFlags_AlwaysClamp)) {
+            Reload();
+        }
         if (Draw::SliderInt(C_TRANSLATE("_BACKGROUND_ALPHA"), &_widget->bgAlpha, 0, 100, "%d%%",
-                        ImGuiSliderFlags_AlwaysClamp)) { Reload(); }
+                            ImGuiSliderFlags_AlwaysClamp)) {
+            Reload();
+        }
         if (Draw::SliderInt(C_TRANSLATE("_WIDGET_SIZE"), &_widget->widgetSize, 0, 200, "%d%%",
-                        ImGuiSliderFlags_AlwaysClamp)) { Reload(); }
+                            ImGuiSliderFlags_AlwaysClamp)) {
+            Reload();
+        }
         if (Draw::SliderInt(C_TRANSLATE("_FONT_SIZE"), &_widget->fontSize, 0, 200, "%d%%",
-                        ImGuiSliderFlags_AlwaysClamp)) { Reload(); }
-        if (ImGui::Checkbox(C_TRANSLATE("_FONT_SHADOW"), &_widget->fontShadow)) { Reload(); }
+                            ImGuiSliderFlags_AlwaysClamp)) {
+            Reload();
+        }
+        if (ImGui::Checkbox(C_TRANSLATE("_FONT_SHADOW"), &_widget->fontShadow)) {
+            Reload();
+        }
     };
 
     static auto groupWidgetSize = ImVec2(0.0f, 0.0f);
@@ -690,14 +754,18 @@ void GuiMenu::DrawConfig() {
     auto groupWidgetLabel = fmt::format("{}  {}", ICON_FA_IMAGE, TRANSLATE("_TAB_CONFIG_WIDGET"));
     Draw::BeginGroupPanel(groupWidgetLabel.c_str(), ImVec2(-FLT_MIN, 0.0f), ImVec2(15.0f, 10.0f));
     {
-        ImGui::BeginChild("WidgetRegionLeft", ImVec2(ImGui::GetContentRegionAvail().x * 0.5f, groupWidgetSize.y), false);
+        ImGui::BeginChild("WidgetRegionLeft", ImVec2(ImGui::GetContentRegionAvail().x * 0.5f, groupWidgetSize.y),
+                          false);
         {
             ImGui::BeginGroup();
             {
                 ImGui::SetNextItemOpen(true, ImGuiCond_Once);
                 ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.5f);
                 if (ImGui::TreeNode(C_TRANSLATE("_TAB_CONFIG_WIDGET_GENERAL"))) {
-                    if (Draw::Combo(config->fontVec, &config->Widget.General.font, C_TRANSLATE("_TAB_CONFIG_WIDGET_GENERAL_FONT"))) { Reload(); }
+                    if (Draw::Combo(config->fontVec, &config->Widget.General.font,
+                                    C_TRANSLATE("_TAB_CONFIG_WIDGET_GENERAL_FONT"))) {
+                        Reload();
+                    }
 
                     std::vector<std::string> displayVec = {TRANSLATE("_DISPLAYMODE_ALWAYS"),
                                                            TRANSLATE("_DISPLAYMODE_INCOMBAT")};
@@ -706,11 +774,13 @@ void GuiMenu::DrawConfig() {
 
                     std::vector<std::string> animVec = {TRANSLATE("_ANIMATIONTYPE_FADE"),
                                                         TRANSLATE("_ANIMATIONTYPE_INSTANT")};
-                    Draw::Combo(animVec, &config->Widget.General.animType, C_TRANSLATE("_TAB_CONFIG_WIDGET_GENERAL_ANIM"));
+                    Draw::Combo(animVec, &config->Widget.General.animType,
+                                C_TRANSLATE("_TAB_CONFIG_WIDGET_GENERAL_ANIM"));
 
                     auto msg = "%.1f" + TRANSLATE("_TIMESECOND");
-                    Draw::SliderFloat(C_TRANSLATE("_TAB_CONFIG_WIDGET_GENERAL_ANIMDELAY"), &config->Widget.General.animDelay,
-                                      1.0f, 5.0f, msg.c_str(), ImGuiSliderFlags_AlwaysClamp);
+                    Draw::SliderFloat(C_TRANSLATE("_TAB_CONFIG_WIDGET_GENERAL_ANIMDELAY"),
+                                      &config->Widget.General.animDelay, 1.0f, 5.0f, msg.c_str(),
+                                      ImGuiSliderFlags_AlwaysClamp);
 
                     ImGui::TreePop();
                 }
@@ -768,12 +838,10 @@ void GuiMenu::DrawConfig() {
         ImGui::EndChild();
     }
     Draw::EndGroupPanel();
-    groupWidgetSize = groupWidgetLeftSize.y > groupWidgetRightSize.y
-            ? groupWidgetLeftSize
-            : groupWidgetRightSize;
+    groupWidgetSize = groupWidgetLeftSize.y > groupWidgetRightSize.y ? groupWidgetLeftSize : groupWidgetRightSize;
 
     ImGui::Text(" ");
-    
+
     static auto settingsSize = ImVec2(0.0f, 0.0f);
     auto groupSettingLabel = fmt::format("{}  {}", ICON_FA_COG, TRANSLATE("_TAB_CONFIG_SETTINGS"));
     Draw::BeginGroupPanel(groupSettingLabel.c_str(), ImVec2(-FLT_MIN, 0.0f), ImVec2(15.0f, 10.0f));
@@ -782,9 +850,12 @@ void GuiMenu::DrawConfig() {
         {
             ImGui::BeginGroup();
             {
-                Draw::InputButton(&config->Settings.modifier1, "Modifier1", TRANSLATE("_EDIT"), TRANSLATE("_MODIFIER1"));
-                Draw::InputButton(&config->Settings.modifier2, "Modifier2", TRANSLATE("_EDIT"), TRANSLATE("_MODIFIER2"));
-                Draw::InputButton(&config->Settings.modifier3, "Modifier3", TRANSLATE("_EDIT"), TRANSLATE("_MODIFIER3"));
+                Draw::InputButton(&config->Settings.modifier1, "Modifier1", TRANSLATE("_EDIT"),
+                                  TRANSLATE("_MODIFIER1"));
+                Draw::InputButton(&config->Settings.modifier2, "Modifier2", TRANSLATE("_EDIT"),
+                                  TRANSLATE("_MODIFIER2"));
+                Draw::InputButton(&config->Settings.modifier3, "Modifier3", TRANSLATE("_EDIT"),
+                                  TRANSLATE("_MODIFIER3"));
             }
             ImGui::EndGroup();
             auto size = ImGui::GetItemRectSize();
@@ -796,10 +867,9 @@ void GuiMenu::DrawConfig() {
         {
             ImGui::BeginGroup();
             {
-                std::vector<std::string> items = {TRANSLATE("_TAB_CONFIG_SETTINGS_SORT_CREATEASC"),
-                                                  TRANSLATE("_TAB_CONFIG_SETTINGS_SORT_CREATEDESC"),
-                                                  TRANSLATE("_TAB_CONFIG_SETTINGS_SORT_NAMEASC"),
-                                                  TRANSLATE("_TAB_CONFIG_SETTINGS_SORT_NAMEDESC")};
+                std::vector<std::string> items = {
+                    TRANSLATE("_TAB_CONFIG_SETTINGS_SORT_CREATEASC"), TRANSLATE("_TAB_CONFIG_SETTINGS_SORT_CREATEDESC"),
+                    TRANSLATE("_TAB_CONFIG_SETTINGS_SORT_NAMEASC"), TRANSLATE("_TAB_CONFIG_SETTINGS_SORT_NAMEDESC")};
                 Draw::Combo(items, &config->Settings.sort, C_TRANSLATE("_TAB_CONFIG_SETTINGS_SORTORDER"));
                 ImGui::Checkbox(C_TRANSLATE("_TAB_CONFIG_SETTINGS_FAVOR"), &config->Settings.favorOnly);
             }
@@ -820,7 +890,8 @@ void GuiMenu::DrawConfig() {
             ImGui::BeginGroup();
             {
                 auto hotkey = reinterpret_cast<uint32_t*>(&config->Gui.hotkey);
-                if (hotkey) Draw::InputButton(hotkey, "GuiHotkey", TRANSLATE("_EDIT"), TRANSLATE("_TAB_CONFIG_GUI_HOTKEY"));
+                if (hotkey)
+                    Draw::InputButton(hotkey, "GuiHotkey", TRANSLATE("_EDIT"), TRANSLATE("_TAB_CONFIG_GUI_HOTKEY"));
                 ImGui::Checkbox(C_TRANSLATE("_TAB_CONFIG_GUI_WINDOWBORDER"), &config->Gui.windowBorder);
                 ImGui::Checkbox(C_TRANSLATE("_TAB_CONFIG_GUI_FRAMEBORDER"), &config->Gui.frameBorder);
             }
@@ -843,8 +914,7 @@ void GuiMenu::DrawConfig() {
                     }
                 }
                 {
-                    std::vector<std::string> items = {TRANSLATE("_STYLE_DARK"),
-                                                      TRANSLATE("_STYLE_LIGHT"),
+                    std::vector<std::string> items = {TRANSLATE("_STYLE_DARK"), TRANSLATE("_STYLE_LIGHT"),
                                                       TRANSLATE("_STYLE_CLASSIC")};
                     Draw::Combo(items, &config->Gui.style, TRANSLATE("_TAB_CONFIG_GUI_STYLE"));
                 }
