@@ -924,8 +924,8 @@ void GuiMenu::DrawConfig() {
                 if (ImGui::IsItemDeactivatedAfterEdit()) {
                     if (config->Gui.fontSize < 13.0f) {
                         config->Gui.fontSize = 13.0f;
-                    } else if (config->Gui.fontSize > 26.0f) {
-                        config->Gui.fontSize = 26.0f;
+                    } else if (config->Gui.fontSize > 64.0f) {
+                        config->Gui.fontSize = 64.0f;
                     }
                     reload_font.store(true);
                 }
