@@ -36,6 +36,7 @@ namespace Scaleform {
 
             assert(success);
             menuFlags.set(RE::UI_MENU_FLAGS::kAllowSaving);
+            menuFlags.set(RE::UI_MENU_FLAGS::kAlwaysOpen);
 
             _view = menu->uiMovie;
             _view->GetVariable(&_root, "_root");
