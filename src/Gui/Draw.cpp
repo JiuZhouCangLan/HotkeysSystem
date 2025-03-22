@@ -4,6 +4,7 @@
 #include "EquipsetManager.h"
 #include "GuiMenu.h"
 #include "Translate.h"
+#include "Utility.h"
 
 #include "Normal.h"
 #include "Potion.h"
@@ -74,15 +75,16 @@ namespace Draw {
                 ImGui::CloseCurrentPopup();
             }
 
-            for (uint32_t key = ImGuiKey_NamedKey_BEGIN; key < ImGuiKey_NamedKey_END; ++key) {
+            for (const auto& key: Utility::acceptableKeys()) {
                 if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(key))) {
                     if (key == ImGuiKey_Escape) {
                         *_key = ImGuiKey_None;
                     } else {
                         *_key = key;
                     }
-                         
+
                     ImGui::CloseCurrentPopup();
+                    break;
                 }
             }
 

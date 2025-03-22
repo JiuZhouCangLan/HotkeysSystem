@@ -86,9 +86,9 @@ public:
     } Widget;
 
     struct config_settings {
-        uint32_t modifier1{641};
-        uint32_t modifier2{642};
-        uint32_t modifier3{643};
+        uint32_t modifier1{ImGuiKey::ImGuiMod_Ctrl};
+        uint32_t modifier2{ImGuiKey::ImGuiMod_Shift};
+        uint32_t modifier3{ImGuiKey::ImGuiMod_Alt};
         uint32_t sort{(uint32_t)Config::SortType::CREATEASC};
         bool favorOnly{false};
     } Settings;

@@ -1,5 +1,7 @@
 #include "Config.h"
+#include "Utility.h"
 
+#include <ranges>
 #include <filesystem>
 #include <toml++/toml.h>
 
@@ -60,9 +62,19 @@ void ConfigHandler::LoadConfig() {
         this->Widget.Equipment.Shout.fontSize = tbl["Widget"]["shout_font_size"].value_or<uint32_t>(100);
         this->Widget.Equipment.Shout.fontShadow = tbl["Widget"]["shout_font_shadow"].value_or<bool>(false);
 
-        this->Settings.modifier1 = tbl["Settings"]["modifier1"].value_or<uint32_t>(ImGuiKey_ModCtrl);
-        this->Settings.modifier2 = tbl["Settings"]["modifier2"].value_or<uint32_t>(ImGuiKey_ModShift);
-        this->Settings.modifier3 = tbl["Settings"]["modifier3"].value_or<uint32_t>(ImGuiKey_ModAlt);
+        const auto modifier1 = tbl["Settings"]["modifier1"].value_or<uint32_t>(ImGuiKey_ModCtrl);
+        if (std::ranges::contains(Utility::acceptableKeys(), modifier1)) {
+            this->Settings.modifier1 = modifier1;
+        }
+        const auto modifier2 = tbl["Settings"]["modifier2"].value_or<uint32_t>(ImGuiKey_ModShift);
+        if (std::ranges::contains(Utility::acceptableKeys(), modifier2)) {
+            this->Settings.modifier2 = modifier2;
+        }
+        const auto modifier3 = tbl["Settings"]["modifier3"].value_or<uint32_t>(ImGuiKey_ModAlt);
+        if (std::ranges::contains(Utility::acceptableKeys(), modifier3)) {
+            this->Settings.modifier3 = modifier3;
+        }
+
         this->Settings.sort = tbl["Settings"]["sort_order"].value_or<uint32_t>(0);
         this->Settings.favorOnly = tbl["Settings"]["favor_only"].value_or<bool>(false);
 

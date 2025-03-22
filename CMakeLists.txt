@@ -42,6 +42,7 @@ set(sources
         src/Scaleform/WidgetMenu.cpp
         src/Offset.h
         src/Utility.h
+        src/Utility.cpp
         src/Serialize.cpp
         src/Event/Input.cpp
         src/Event/Equip.cpp
